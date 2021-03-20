@@ -1,0 +1,1045 @@
+library(tidyverse)
+library(dplyr)
+library(caret)
+library(RWeka)
+library(lattice)
+library(plyr)
+library(ggplot2)
+library(corrplot)
+library(e1071)
+library(AUC)
+library(ROCR)
+library(kernlab)
+library(discretization)
+library(ISLR)
+library(bnclassify)
+library(prob)
+library(AUC)
+library(ROCR)
+library(MLmetrics)
+library(randomForest)
+
+
+dplyr_update()
+
+packageVersion("dplyr")
+packageVersion("rlang")
+
+install.packages("dplyr")
+
+remotes::install_github("tidyverse/dplyr")
+
+install.packages("Rcpp")
+install.packages("plotly")
+
+# Instalacion de algunos paquetes requeridos
+# if (!requireNamespace("BiocManager", quietly = TRUE))
+#   install.packages("BiocManager")
+# BiocManager::install("Rgraphviz")
+# BiocManager::install("graph")
+# install.packages("MLmetrics")
+
+#------------------------------Importacion y analisis previo------------------------
+# Importamos el Data Set
+path <- file.path("C:/Users/PILAR/Documents/R", "Data Sets", "churnTrain.csv")
+clientes <- read.delim(path, header = TRUE, sep = ",", stringsAsFactors = TRUE)
+
+# Vemos su estructúra
+str(clientes)
+
+# Visualizacion de las dimensiones de nuestro juego de datos
+dim(clientes)
+
+# Vemos que no hay valores faltantes
+anyNA(clientes)
+
+# Visualizacion de los nombres de las columnas de nuestro juego de datos
+colnames(clientes)
+
+# Vemos que todos los numeros son distintos y por tanto no aportan informacion
+str(factor(clientes[,"Phone_No"]))
+nrow(clientes)
+
+
+
+# Nuevo Data Set sin Code Area ni Phone_No
+clientes <- clientes[,c("State","Account_Length",
+                        "International_Plan","Total_Intl_Minutes",
+                        "Total_Intl_Calls","Total_Intl_Charge",
+                        "Voice_Mail_Plan","No_Vmail_Messages",
+                        "Total_Day_minutes","Total_Day_Calls","Total_Day_charge",
+                        "Total_Eve_Minutes","Total_Eve_Calls","Total_Eve_Charge",
+                        "Total_Night_Minutes","Total_Night_Calls","Total_Night_Charge",
+                        "No_CS_Calls","Churn")]
+
+# Cambiamos el nombre a la columna clase
+names(clientes) <- c("State","Account_Length",
+                     "International_Plan","Total_Intl_Minutes"
+                     ,"Total_Intl_Calls","Total_Intl_Charge",
+                     "Voice_Mail_Plan","No_Vmail_Messages",
+                     "Total_Day_minutes","Total_Day_Calls","Total_Day_charge",
+                     "Total_Eve_Minutes","Total_Eve_Calls","Total_Eve_Charge",
+                     "Total_Night_Minutes","Total_Night_Calls","Total_Night_Charge",
+                     "No_CS_Calls","Class")
+
+
+# --------------------------------Visualización de datos--------------------------------
+# Balanceo de la variable clase
+nrow(clientes[clientes[,"Class"]==TRUE,])/nrow(clientes)
+nrow(clientes[clientes[,"Class"]==FALSE,])/nrow(clientes)
+
+# Fidelidad en función del estado
+ggplot() + geom_bar(data = clientes, aes(x = State, fill = factor(!Class)), position = "fill")
+
+# Fidelidad en función de la facturación
+ggplot() + geom_bar(data = clientes, aes(x = Account_Length, fill = factor(!Class)))
+ggplot() + geom_bar(data = clientes, aes(x = factor(Account_Length), fill = factor(!Class)), position = "fill")
+
+
+# Variables dependientes
+ggplot(clientes, aes(Total_Intl_Minutes, Total_Intl_Charge, colour = factor(!Class))) +
+  geom_point()
+ggplot(clientes, aes(Total_Day_minutes, Total_Day_charge, colour = factor(!Class))) +
+  geom_point()
+ggplot(clientes, aes(Total_Eve_Minutes, Total_Eve_Charge, colour = factor(!Class))) +
+  geom_point()
+ggplot(clientes, aes(Total_Night_Minutes, Total_Night_Charge, colour = factor(!Class))) +
+  geom_point()
+
+# Independencia entre variables
+ggplot(clientes, aes(Total_Intl_Charge, Total_Intl_Calls, colour = factor(!Class))) +
+  geom_point()
+ggplot(clientes, aes(Total_Day_charge, Total_Day_Calls, colour = factor(!Class))) +
+  geom_point()
+ggplot(clientes, aes(Total_Eve_Charge, Total_Eve_Calls, colour = factor(!Class))) +
+  geom_point()
+ggplot(clientes, aes(Total_Night_Charge, Total_Night_Calls, colour = factor(!Class))) +
+  geom_point()
+
+# Fidelidad en función del tamaño de cuenta
+ggplot(clientes, aes(factor(Total_Intl_Minutes), fill = factor(!Class))) +
+  geom_bar() + facet_grid(cols=vars(International_Plan))
+
+# Fidelidad en función de la mensagería de voz
+ggplot(clientes, aes(factor(No_Vmail_Messages), fill = factor(!Class))) +
+  geom_bar() + facet_grid(cols=vars(Voice_Mail_Plan))
+
+# Fidelidad en función de las llamadas de tarificación especial
+ggplot() + geom_bar(data = clientes, aes(x = factor(No_CS_Calls), fill = factor(!Class)))
+ggplot() + geom_bar(data = clientes, aes(x = factor(No_CS_Calls), fill = factor(!Class)), position = "fill")
+
+# Diagramas de Cajas
+ggplot(clientes, aes(x=factor(Class), y=Total_Intl_Minutes)) + 
+  geom_boxplot()
+ggplot(clientes, aes(x=factor(Class), y=Total_Intl_Calls)) + 
+  geom_boxplot()
+ggplot(clientes, aes(x=factor(Class), y=Total_Day_minutes)) + 
+  geom_boxplot()
+ggplot(clientes, aes(x=factor(Class), y=Total_Day_charge)) + 
+  geom_boxplot()
+ggplot(clientes, aes(x=factor(Class), y=Total_Eve_Minutes)) + 
+  geom_boxplot()
+ggplot(clientes, aes(x=factor(Class), y=Total_Eve_Charge)) + 
+  geom_boxplot()
+ggplot(clientes, aes(x=factor(Class), y=Total_Night_Minutes)) + 
+  geom_boxplot()
+ggplot(clientes, aes(x=factor(Class), y=Total_Night_Charge)) + 
+  geom_boxplot()
+
+# Matriz de correlaciones
+clientes_correlaciones <- clientes[,c(predictores_numericos,"Class")]
+clientes_correlaciones[,"Account_Length"] <- colwise(as.numeric)(as.data.frame(clientes_correlaciones[,"Account_Length"]))
+clientes_correlaciones[,"International_Plan"] <- colwise(as.numeric)(as.data.frame(clientes_correlaciones[,"International_Plan"]))
+clientes_correlaciones[,"Total_Intl_Calls"] <- colwise(as.numeric)(as.data.frame(clientes_correlaciones[,"Total_Intl_Calls"]))
+clientes_correlaciones[,"Voice_Mail_Plan"] <- colwise(as.numeric)(as.data.frame(clientes_correlaciones[,"Voice_Mail_Plan"]))
+clientes_correlaciones[,"No_Vmail_Messages"] <- colwise(as.numeric)(as.data.frame(clientes_correlaciones[,"No_Vmail_Messages"]))
+clientes_correlaciones[,"Total_Day_Calls"] <- colwise(as.numeric)(as.data.frame(clientes_correlaciones[,"Total_Day_Calls"]))
+clientes_correlaciones[,"Total_Eve_Calls"] <- colwise(as.numeric)(as.data.frame(clientes_correlaciones[,"Total_Eve_Calls"]))
+clientes_correlaciones[,"Total_Night_Calls"] <- colwise(as.numeric)(as.data.frame(clientes_correlaciones[,"Total_Night_Calls"]))
+clientes_correlaciones[,"No_CS_Calls"] <- colwise(as.numeric)(as.data.frame(clientes_correlaciones[,"No_CS_Calls"]))
+
+boolean_clientes_correlaciones <- as.factor(clientes_correlaciones$"Class")
+levels(boolean_clientes_correlaciones)<- c("TRUE","FALSE")
+boolean_clientes_correlaciones <- as.logical(boolean_clientes_correlaciones)
+
+clientes_correlaciones[,"Class"] <- as.numeric(boolean_clientes_correlaciones)
+
+corrplot(cor(clientes_correlaciones), method = "number", type = "upper", col = "black")
+
+# pairs(clientes_correlaciones)
+
+
+
+# ------------------------------- Preparacion de datos ----------------------------------
+# Eliminacion de variables redundantes
+clientes <- clientes[,c("State","Account_Length",
+                        "International_Plan","Total_Intl_Minutes","Total_Intl_Calls",
+                        "Voice_Mail_Plan","No_Vmail_Messages",
+                        "Total_Day_minutes","Total_Day_Calls",
+                        "Total_Eve_Minutes","Total_Eve_Calls",
+                        "Total_Night_Minutes","Total_Night_Calls",
+                        "No_CS_Calls","Class")]
+
+
+# Convertimos la variable clase a factoriál
+clientes[,"Class"] <- colwise(as.factor)(as.data.frame(!clientes[,"Class"]))
+levels(clientes$Class)[levels(clientes$Class)=="TRUE"] <- "negative"
+levels(clientes$Class)[levels(clientes$Class)=="FALSE"] <- "positive"
+
+# Creamos las particiones Train y Test
+set.seed(33)
+clientes_Partition <- createDataPartition(clientes$Class,p=0.8,list=FALSE)
+clientes_Train <- clientes[clientes_Partition,]
+clientes_Test <- clientes[-clientes_Partition,]
+
+# Creamos un vector logico empleado en algunas funciones
+boolean_Test <- as.factor(clientes_Test$"Class")
+levels(boolean_Test)<- c("TRUE","FALSE")
+boolean_Test <- as.logical(boolean_Test)
+
+# Variables predictoras empleadas en los modelos
+predictores <- c("State","Account_Length",
+                 "International_Plan","Total_Intl_Minutes","Total_Intl_Calls",
+                 "Voice_Mail_Plan","No_Vmail_Messages",
+                 "Total_Day_minutes","Total_Day_Calls",
+                 "Total_Eve_Minutes","Total_Eve_Calls",
+                 "Total_Night_Minutes","Total_Night_Calls",
+                 "No_CS_Calls")
+
+predictores_numericos <- c("Account_Length",
+                           "International_Plan","Total_Intl_Minutes","Total_Intl_Calls",
+                           "Voice_Mail_Plan","No_Vmail_Messages",
+                           "Total_Day_minutes","Total_Day_Calls",
+                           "Total_Eve_Minutes","Total_Eve_Calls",
+                           "Total_Night_Minutes","Total_Night_Calls",
+                           "No_CS_Calls")
+
+
+# ------------------Numerizacion de las variables-----------------
+# Duplicamos las variables
+clientes_num_Train <- clientes_Train
+clientes_num_Test <- clientes_Test
+
+
+# Numerizamos las variables del conjunto Train
+clientes_num_Train[,"Account_Length"] <- colwise(as.numeric)(as.data.frame(clientes_num_Train[,"Account_Length"]))
+clientes_num_Train[,"International_Plan"] <- colwise(as.numeric)(as.data.frame(clientes_num_Train[,"International_Plan"]))
+clientes_num_Train[,"Total_Intl_Calls"] <- colwise(as.numeric)(as.data.frame(clientes_num_Train[,"Total_Intl_Calls"]))
+clientes_num_Train[,"Voice_Mail_Plan"] <- colwise(as.numeric)(as.data.frame(clientes_num_Train[,"Voice_Mail_Plan"]))
+clientes_num_Train[,"No_Vmail_Messages"] <- colwise(as.numeric)(as.data.frame(clientes_num_Train[,"No_Vmail_Messages"]))
+clientes_num_Train[,"Total_Day_Calls"] <- colwise(as.numeric)(as.data.frame(clientes_num_Train[,"Total_Day_Calls"]))
+clientes_num_Train[,"Total_Eve_Calls"] <- colwise(as.numeric)(as.data.frame(clientes_num_Train[,"Total_Eve_Calls"]))
+clientes_num_Train[,"Total_Night_Calls"] <- colwise(as.numeric)(as.data.frame(clientes_num_Train[,"Total_Night_Calls"]))
+clientes_num_Train[,"No_CS_Calls"] <- colwise(as.numeric)(as.data.frame(clientes_num_Train[,"No_CS_Calls"]))
+
+
+# Numerizamos las variables del conjunto Test
+clientes_num_Test[,"Account_Length"] <- colwise(as.numeric)(as.data.frame(clientes_num_Test[,"Account_Length"]))
+clientes_num_Test[,"International_Plan"] <- colwise(as.numeric)(as.data.frame(clientes_num_Test[,"International_Plan"]))
+clientes_num_Test[,"Total_Intl_Calls"] <- colwise(as.numeric)(as.data.frame(clientes_num_Test[,"Total_Intl_Calls"]))
+clientes_num_Test[,"Voice_Mail_Plan"] <- colwise(as.numeric)(as.data.frame(clientes_num_Test[,"Voice_Mail_Plan"]))
+clientes_num_Test[,"No_Vmail_Messages"] <- colwise(as.numeric)(as.data.frame(clientes_num_Test[,"No_Vmail_Messages"]))
+clientes_num_Test[,"Total_Day_Calls"] <- colwise(as.numeric)(as.data.frame(clientes_num_Test[,"Total_Day_Calls"]))
+clientes_num_Test[,"Total_Eve_Calls"] <- colwise(as.numeric)(as.data.frame(clientes_num_Test[,"Total_Eve_Calls"]))
+clientes_num_Test[,"Total_Night_Calls"] <- colwise(as.numeric)(as.data.frame(clientes_num_Test[,"Total_Night_Calls"]))
+clientes_num_Test[,"No_CS_Calls"] <- colwise(as.numeric)(as.data.frame(clientes_num_Test[,"No_CS_Calls"]))
+
+
+# ------------------Discretizacion de los datos---------------------
+# Creamos una particion para discretizar los datos
+set.seed(33)
+clientes_particion_discret <- createDataPartition(clientes_Train$Class,p=0.6,list=FALSE)
+
+# Datos para hacer las discretizaciones
+clientes_discret <- clientes[-clientes_particion_discret,]
+
+# Datos para entrenar el modelo TAN
+clientes_discret_Train <- clientes[clientes_particion_discret,]
+clientes_discret_Test <- clientes_Test
+
+
+# Variables a discretizar, junto a la clase
+variables_discret <- c("Account_Length",
+                        "Total_Intl_Minutes","Total_Intl_Calls",
+                        "No_Vmail_Messages",
+                        "Total_Day_minutes","Total_Day_Calls",
+                        "Total_Eve_Minutes","Total_Eve_Calls",
+                        "Total_Night_Minutes","Total_Night_Calls",
+                        "No_CS_Calls","Class")
+
+# ------------------Discretización-----------------
+
+# Discretizacion y factorizacion de datos numericos
+set.seed(33)
+discr <- disc.Topdown(clientes_discret[,variables_discret], method = 3)
+discr$cutp
+
+# función que discretiza cada numero
+discretizacion <- function(numero,puntos_corte) {
+  num_punto_corte <- 0
+  num_punto_corte <- length(puntos_corte)
+  if (num_punto_corte==1){
+    if (numero<=puntos_corte[[1]]){
+      numero <- 1
+    } else {
+      numero <- 1
+    }
+  } 
+  if(num_punto_corte>1){
+    if (numero<=puntos_corte[[1]]){
+      numero <- 1
+    } 
+    for (int in 1:(num_punto_corte-1)){
+      if (numero>puntos_corte[[int]] & numero<=puntos_corte[[int+1]]) {
+        numero <- int 
+      }
+    }
+    if (numero>puntos_corte[[num_punto_corte]]) {
+      numero <- num_punto_corte
+    }
+  }
+  return(numero)
+}
+
+# Funcion que discretiza una columna
+discretizaciones <- function(numeros,puntos_corte){
+  discretos <- 1:length(numeros)
+  i <- 1
+  for(numero in numeros){
+    numero <- discretizacion(numero,puntos_corte)
+    discretos[i]<- numero
+    i <- i + 1
+  }
+  return(discretos)
+}
+
+# ggplot(discr$Disc.data, aes(factor(Account_Length), fill = Class)) + geom_bar(position = "fill")
+# ggplot(discr$Disc.data, aes(factor(Total_Intl_Minutes), fill = Class)) + geom_bar(position = "fill")
+# ggplot(discr$Disc.data, aes(factor(Total_Intl_Calls), fill = Class)) + geom_bar(position = "fill")
+# ggplot(discr$Disc.data, aes(factor(No_Vmail_Messages), fill = Class)) + geom_bar(position = "fill")
+# ggplot(discr$Disc.data, aes(factor(No_Vmail_Messages), fill = Class)) + geom_bar()
+# ggplot(discr$Disc.data, aes(factor(Total_Day_minutes), fill = Class)) + geom_bar()
+# ggplot(discr$Disc.data, aes(factor(Total_Night_Minutes), fill = Class)) + geom_bar(position = "fill")
+# ggplot(discr$Disc.data, aes(factor(Total_Eve_Minutes), fill = Class)) + geom_bar(position = "fill")
+# ggplot(discr$Disc.data, aes(factor(Total_Day_minutes), fill = Class)) + geom_bar(position = "fill")
+# ggplot(clientes_discret, aes(Total_Day_minutes, fill = Class)) + geom_bar(position = "fill")
+
+
+# Seleccionamos la columna a factorizar
+discretizaciones_var <- c("Account_Length",
+                          "Total_Intl_Minutes","Total_Intl_Calls",
+                          "No_Vmail_Messages",
+                          "Total_Day_minutes","Total_Day_Calls",
+                          "Total_Eve_Minutes","Total_Eve_Calls",
+                          "Total_Night_Minutes","Total_Night_Calls",
+                          "No_CS_Calls")
+
+# Discretizacion del conjunto de Train
+j <- 1
+for(i in discretizaciones_var) {
+  clientes_discret_Train[,i] <- discretizaciones(clientes_discret_Train[,i],discr$cutp[[j]])
+  j<-j+1
+}
+# Convertimos a factor
+for(i in discretizaciones_var) clientes_discret_Train[,i] <- 
+  as.factor(clientes_discret_Train[,i])
+# Discretizacion del conjunto Test
+j <- 1
+for(i in discretizaciones_var) {
+  clientes_discret_Test[,i] <- discretizaciones(clientes_discret_Test[,i],discr$cutp[[j]])
+  j<-j+1
+}
+# Convertimos a factor
+for(i in discretizaciones_var) clientes_discret_Test[,i] <- 
+  as.factor(clientes_discret_Test[,i])
+# Igualizacion de factores
+for(i in discretizaciones_var) levels(clientes_discret_Test[,i]) <-
+  levels(clientes_discret_Train[,i])
+
+# ------------------------ Entrenamiento de modelos --------------
+# ------------------------ Modelo RIPPER -------------------------
+
+# Configuramos el trControl que utilizaremos en todos los modelos
+trControl = trainControl(
+  classProbs = TRUE,
+  summaryFunction=twoClassSummary,
+  method = "cv", 
+  number = 5,
+  verboseIter = TRUE)
+
+# Modelo RIPPER
+set.seed(33)
+model_RIPPER_param <- train(
+  Class ~ ., 
+  clientes_Train,
+  method = "JRip",
+  #tuneGrid = expand.grid(NumOpt = 7, NumFolds = 4, MinWeights = 3),
+  tuneGrid = expand.grid(NumOpt = 1:7, NumFolds = 2:7, MinWeights = 1:9),
+  trControl = trControl,
+  metric = c("ROC")
+)
+
+# Visualizamos los resultados
+plot(model_RIPPER_param)
+
+# Vemos cual es el mejor modelo
+model_RIPPER_param$bestTune
+
+# library(party)
+# library(partykit)
+# install.packages(partykit)
+# 
+# 
+# # Creamos la funcion auxiliar
+# ripperFunc <-  list(summary = rocSummary,
+#                     fit = function(x, y, first, last, ...){
+#                       dats <- cbind(x,y)
+#                       names(dats) <- c(names(x), "Class")
+#                       JRip(Class~.,data=dats,control = Weka_control(), 
+#                            options = c(NumOpt = model_RIPPER$bestTune[,1], NumFolds = model_RIPPER$bestTune[,2]
+#                                        , MinWeights = model_RIPPER$bestTune[,3]))
+#                     },
+#                     pred = function(object, x)  predict(object, x, type="prob")[,1],
+#                     rank = function(object, x, y) {
+#                       vimp <- varImp(object)
+#                       vimp <- vimp[order(vimp$Overall,decreasing = TRUE),,drop = FALSE]
+#                       vimp$var <- rownames(vimp)                  
+#                       vimp
+#                     },
+#                     selectSize = pickSizeBest,
+#                     selectVar = pickVars)
+# 
+# 
+# 
+# #Configuramos los parámetros
+# control_RIPPER <- rfeControl(functions=ripperFunc, method="cv", number=5, returnResamp = "all")
+# 
+# # Seleccionamos las variables
+# ripperfFE <- rfe(clientes_Train[,predictores],clientes_Train$"Class",
+#                        rfeControl=control_RIPPER, sizes = c(8,9,10,11,12,13,14))
+# 
+# 
+# # Vemos las variables seleccionadas
+# ripperfFE$"optVariables"
+
+
+ripperGA <- list(
+  fit <- function (x, y, lev = NULL, last = FALSE, ...) 
+  {
+    dats <- cbind(x,y)
+    names(dats) <- c(names(x), "Class")
+    JRip(Class~.,data=dats,control = Weka_control(), 
+         options = c(NumOpt = model_RIPPER_param$bestTune[,1], 
+                     NumFolds = model_RIPPER_param$bestTune[,2], 
+                     MinWeights = model_RIPPER_param$bestTune[,3]))
+  },
+  
+  pred <- function (object, x) 
+  {
+    tmp <- predict(object, x)
+    out <- cbind(data.frame(pred = tmp), 
+                 as.data.frame(predict(object, x, type = "prob")))
+  },
+  
+  fitness_intern <- function (object, x, y, maximize, p)
+  {
+    roc <- auc(roc(predict(object, x, type = "prob")[,1], 
+                   as.factor(y)))
+    names(roc) <- c("ROC")
+    return(roc)
+  },
+  
+  fitness_extern <- function (data, lev = NULL, model = NULL) 
+  {
+    roc <- auc(roc(data[, "positive"], 
+                   as.factor(data[, "obs"])))
+    names(roc) <- c("ROC")
+    return(roc)
+  },
+  
+  initial <- function (vars, popSize, ...) 
+  {
+    x <- matrix(NA, nrow = popSize, ncol = vars)
+    probs <- seq(0.9, 0.1, length = popSize)
+    for (i in 1:popSize) {
+      x[i, ] <- sample(0:1, replace = TRUE, size = vars, prob = c(probs[i], 
+                                                                  1 - probs[i]))
+    }
+    var_count <- apply(x, 1, sum)
+    if (any(var_count == 0)) {
+      for (i in which(var_count == 0)) {
+        x[i, ] <- sample(0:1, replace = TRUE, size = vars)
+      }
+    }
+    x
+  },
+  
+  selection <- function (population, fitness, r = NULL, q = NULL, ...) 
+  {
+    popSize = nrow(population)
+    if (is.null(r)) 
+      r <- 2/(popSize * (popSize - 1))
+    if (is.null(q)) 
+      q <- 2/popSize
+    rank <- (popSize + 1) - rank(fitness, ties.method = "random")
+    prob <- q - (rank - 1) * r
+    sel <- sample(1:popSize, size = popSize, prob = pmin(pmax(0, 
+                                                              prob), 1, na.rm = TRUE), replace = TRUE)
+    out <- list(population = population[sel, , drop = FALSE], 
+                fitness = fitness[sel])
+    out
+  },
+  
+  crossover <- function (population, fitness, parents, ...) 
+  {
+    fitness <- fitness[parents]
+    parents <- population[parents, , drop = FALSE]
+    n <- ncol(parents)
+    children <- matrix(as.double(NA), nrow = 2, ncol = n)
+    fitnessChildren <- rep(NA, 2)
+    crossOverPoint <- sample(0:n, size = 1)
+    if (crossOverPoint == 0) {
+      children[1:2, ] <- parents[2:1, ]
+      fitnessChildren[1:2] <- fitness[2:1]
+    }
+    else if (crossOverPoint == n) {
+      children <- parents
+      fitnessChildren <- fitness
+    }
+    else {
+      children[1, ] <- c(parents[1, 1:crossOverPoint], parents[2, 
+                                                               (crossOverPoint + 1):n])
+      children[2, ] <- c(parents[2, 1:crossOverPoint], parents[1, 
+                                                               (crossOverPoint + 1):n])
+    }
+    out <- list(children = children, fitness = fitnessChildren)
+    out
+  },
+  
+  mutation <- function (population, parent, ...) 
+  {
+    mutate <- parent <- as.vector(population[parent, ])
+    n <- length(parent)
+    j <- sample(1:n, size = 1)
+    mutate[j] <- abs(mutate[j] - 1)
+    mutate
+  },
+  
+  selectIter <- function (x, metric, maximize) 
+  {
+    bestIter <- if (maximize) 
+      which.max(x[, metric])
+    else which.min(x[, metric])
+    bestIter
+  }
+)
+
+names(ripperGA) <- c("fit","pred","fitness_intern","fitness_extern",
+                     "initial","selection","crossover",     
+                     "mutation","selectIter" )
+
+ripper_ctrl <- gafsControl(functions = ripperGA,
+                       metric = c(internal = "ROC", external = "ROC"),
+                       method = "cv",
+                       number = 4,
+                       repeats = 2,
+                       verbose = TRUE)
+
+set.seed(33)
+ripper_ga <- gafs(x = clientes_Train[,predictores], 
+              y = clientes_Train$"Class",
+              iters = 35,
+              gafsControl = ripper_ctrl)
+
+# Variables obtenidas en cada particion
+ripper_ga$resampled_vars
+
+# Variables obtenidas en el conjunto final
+ripper_ga$"ga"$final
+
+# Seleccionamos el modelo resultante y las variables
+model_RIPPER <- ripper_ga$"ga"$fit
+test_RIPPER <- clientes_Test[,ripper_ga$"ga"$final]
+
+
+# Matriz de confusión RIPPER
+pred_RIPPER <- predict(model_RIPPER,test_RIPPER)
+cm_RIPPER <- confusionMatrix(pred_RIPPER,clientes_Test[["Class"]])
+
+# Medidas provabilisticas
+pred_prob_RIPPER <- predict(model_RIPPER,test_RIPPER, type="prob")
+auc_RIPPER <- auc(roc(pred_prob_RIPPER[,1], clientes_Test$"Class"))
+logLoss_RIPPER <- LogLoss(pred_prob_RIPPER[,1], boolean_Test)
+
+
+# Ordenamos nuestras medidas en un Data Frame
+medidas_RIPPER <- data.frame("Accuracy" = as.numeric(cm_RIPPER$overall[1]),
+                             "Kappa" = as.numeric(cm_RIPPER$overall[2]),
+                             "Post-Pred-Value" = as.numeric(cm_RIPPER$byClass[3]),
+                             "AUC" = auc_RIPPER,
+                             "LogLoss" = logLoss_RIPPER)
+medidas_RIPPER
+
+
+# ------------------- Modelo Arbol Naive Bayes -------------------------
+# Seleccionmos las variables mas significativas
+set.seed(33)
+clientes_nb_Resample <- createResample(clientes_discret_Train$Class, list=FALSE, times = 2)
+# clientes_nb_tree_part <- createDataPartition(clientes_discret_Train$Class,p=0.5,list=FALSE)
+clientes_nb_Tree <- clientes_discret_Train[clientes_nb_Resample[,1],]
+clientes_nb_Train <- clientes_discret_Train[clientes_nb_Resample[,2],]
+
+
+#set.seed(33)
+#seleccion_bsej <- bsej("Class", clientes_discret_Train, k = 5, epsilon = 0.01, smooth = 0, cache_reset = NULL)
+#seleccion_fssj <- fssj("Class", clientes_discret_Train, k = 5, epsilon = 0.01, smooth = 0.02, cache_reset = NULL)
+#seleccion_hc <- tan_hc("Class", clientes_discret_Train, k = 5, epsilon = 0.01, smooth = 0, cache_reset = NULL)
+
+set.seed(33)
+seleccion_kdb <- kdb(
+  "Class",
+  clientes_nb_Tree,
+  k = 5,
+  kdbk = 2,
+  epsilon = 0.001,
+  smooth = 0,
+  cache_reset = NULL
+)
+
+plot(seleccion_kdb, fontsize=40)
+
+model_TAN <- lp(seleccion_kdb , clientes_nb_Train, smooth = 0.01)
+
+
+# Matriz de confusion Modelo Arbol Naiv Balles
+pred_TAN <- predict(model_TAN,clientes_discret_Test[,features(seleccion_kdb)])
+cm_TAN <- confusionMatrix(pred_TAN,clientes_discret_Test$Class)
+
+# Metricas provabilisticas
+pred_prob_TAN <- predict(model_TAN,clientes_discret_Test[,features(seleccion_kdb)], prob = TRUE)
+auc_TAN <- auc(roc(pred_prob_TAN[,1], clientes_discret_Test$"Class"))
+logLoss_TAN <- LogLoss(pred_prob_TAN[,1], boolean_Test)
+
+
+# Ordenamos nuestras medidas en un Data Frame
+medidas_TAN <- data.frame("Accuracy" = as.numeric(cm_TAN$overall[1]),
+                          "Kappa" = as.numeric(cm_TAN$overall[2]),
+                          "Post Pred Value" = as.numeric(cm_TAN$byClass[3]),
+                          "AUC" = auc_TAN,
+                          "LogLoss" = logLoss_TAN)
+
+medidas_TAN
+
+
+#--------------------Componentes Principales----------------
+# calculamos las componentes principales
+pc <- prcomp(clientes_num_Train[predictores_numericos], scale = TRUE)
+
+# Visualizamos las componentes principales
+pc$rotation
+
+# Visualizamos su distribucion
+biplot(x = pc, scale = 0, cex = 0.6, col = c("blue4", "brown3"))
+
+# Visualizamos la varianza
+pc$sdev^2
+prop_varianza <- pc$sdev^2 / sum(pc$sdev^2)
+
+
+prop_varianza
+ggplot(data = data.frame(prop_varianza, pc = 1:13),
+       aes(x = pc, y = prop_varianza)) +
+  geom_col(width = 0.3) +
+  scale_y_continuous(limits = c(0,1)) +
+  theme_bw() +
+  labs(x = "Componente principal",
+       y = "Prop. de varianza explicada")
+
+prop_varianza_acum <- cumsum(prop_varianza)
+ggplot(data = data.frame(prop_varianza_acum, pc = 1:13),
+       aes(x = pc, y = prop_varianza_acum, group = 1)) +
+  geom_point() +
+  geom_line() +
+  theme_bw() +
+  labs(x = "Componente principal",
+       y = "Prop. varianza explicada acumulada")
+
+# clientes_pc_1 <- pc$x
+# corrplot(cor(clientes_pc_1), method = "number", type = "upper", col = "black")
+
+
+
+# Selecionamos un supgrupo de componentes principales y creamos nuestro nuevo DataSet
+clientes_pc <- pc$x[,c("PC1","PC2","PC3","PC4","PC5","PC6","PC7","PC8","PC9","PC10","PC11","PC12")]
+clientes_pc_Train <- cbind(clientes_pc,clientes_num_Train["Class"])
+
+
+
+# Aplicamos las mismas modificaciones al conjunto de Test
+escalado_test <- scale(clientes_num_Test[c(predictores_numericos)], center = TRUE, scale = TRUE)
+escalado_test <- as.data.frame(escalado_test)
+escalado_test <- t(escalado_test)
+
+pc_importantes <- pc$rotation[,c("PC1","PC2","PC3","PC4","PC5","PC6","PC7","PC8","PC9","PC10","PC11","PC12")]
+pc_scores <- t(pc_importantes) %*% escalado_test
+pc_scores <- t(pc_scores)
+pc_scores <- as.data.frame(pc_scores)
+clientes_pc_Test <- cbind(pc_scores,clientes_num_Test["Class"])
+
+
+# --------------------Regresion Logistica---------------------
+glmGA <- list(
+  fit <- function (x, y, lev = NULL, last = FALSE, ...) 
+  {
+    dats <- cbind(x,y)
+    names(dats) <- c(names(x), "Class")
+    train(
+      Class ~ ., 
+      dats,
+      method = "glm",
+      family = "binomial",
+      metric = "ROC",
+      trControl = trainControl(
+        classProbs = TRUE,
+        summaryFunction=twoClassSummary,
+        method = "cv", 
+        number = 10
+      )
+    )
+  },
+  
+  pred <- function (object, x) 
+  {
+    tmp <- predict(object, x)
+    out <- cbind(data.frame(pred = tmp), 
+                 as.data.frame(predict(object, x, type = "prob")))
+  },
+  
+  fitness_intern <- function (object, x, y, maximize, p)
+  {
+    roc <- auc(roc(predict(object, x, type = "prob")[,1], 
+                   as.factor(y)))
+    names(roc) <- c("ROC")
+    return(roc)
+  },
+  
+  fitness_extern <- function (data, lev = NULL, model = NULL) 
+  {
+    roc <- auc(roc(data[, "positive"], 
+                   as.factor(data[, "obs"])))
+    names(roc) <- c("ROC")
+    return(roc)
+  },
+  
+  initial <- function (vars, popSize, ...) 
+  {
+    x <- matrix(NA, nrow = popSize, ncol = vars)
+    probs <- seq(0.9, 0.1, length = popSize)
+    for (i in 1:popSize) {
+      x[i, ] <- sample(0:1, replace = TRUE, size = vars, prob = c(probs[i], 
+                                                                  1 - probs[i]))
+    }
+    var_count <- apply(x, 1, sum)
+    if (any(var_count == 0)) {
+      for (i in which(var_count == 0)) {
+        x[i, ] <- sample(0:1, replace = TRUE, size = vars)
+      }
+    }
+    x
+  },
+  
+  selection <- function (population, fitness, r = NULL, q = NULL, ...) 
+  {
+    popSize = nrow(population)
+    if (is.null(r)) 
+      r <- 2/(popSize * (popSize - 1))
+    if (is.null(q)) 
+      q <- 2/popSize
+    rank <- (popSize + 1) - rank(fitness, ties.method = "random")
+    prob <- q - (rank - 1) * r
+    sel <- sample(1:popSize, size = popSize, prob = pmin(pmax(0, 
+                                                              prob), 1, na.rm = TRUE), replace = TRUE)
+    out <- list(population = population[sel, , drop = FALSE], 
+                fitness = fitness[sel])
+    out
+  },
+  
+  crossover <- function (population, fitness, parents, ...) 
+  {
+    fitness <- fitness[parents]
+    parents <- population[parents, , drop = FALSE]
+    n <- ncol(parents)
+    children <- matrix(as.double(NA), nrow = 2, ncol = n)
+    fitnessChildren <- rep(NA, 2)
+    crossOverPoint <- sample(0:n, size = 1)
+    if (crossOverPoint == 0) {
+      children[1:2, ] <- parents[2:1, ]
+      fitnessChildren[1:2] <- fitness[2:1]
+    }
+    else if (crossOverPoint == n) {
+      children <- parents
+      fitnessChildren <- fitness
+    }
+    else {
+      children[1, ] <- c(parents[1, 1:crossOverPoint], parents[2, 
+                                                               (crossOverPoint + 1):n])
+      children[2, ] <- c(parents[2, 1:crossOverPoint], parents[1, 
+                                                               (crossOverPoint + 1):n])
+    }
+    out <- list(children = children, fitness = fitnessChildren)
+    out
+  },
+  
+  mutation <- function (population, parent, ...) 
+  {
+    mutate <- parent <- as.vector(population[parent, ])
+    n <- length(parent)
+    j <- sample(1:n, size = 1)
+    mutate[j] <- abs(mutate[j] - 1)
+    mutate
+  },
+  
+  selectIter <- function (x, metric, maximize) 
+  {
+    bestIter <- if (maximize) 
+      which.max(x[, metric])
+    else which.min(x[, metric])
+    bestIter
+  }
+)
+
+names(glmGA) <- c("fit","pred","fitness_intern","fitness_extern",
+                  "initial","selection","crossover",     
+                  "mutation","selectIter" )
+
+glm_ctrl <- gafsControl(functions = glmGA,
+                        metric = c(internal = "ROC", external = "ROC"),
+                        method = "cv",
+                        number = 4,
+                        repeats = 2,
+                        verbose = TRUE)
+
+glm_ga <- gafs(x = clientes_pc_Train[,1:12], 
+               y = clientes_pc_Train$"Class",
+               iters = 10,
+               seeds = 33,
+               gafsControl = glm_ctrl)
+
+# Vemos las variables optimas
+glm_ga$optVariables
+
+
+model_GLM <- glm_ga$fit
+clientes_glm <- clientes_pc_Test[,glm_ga$optVariables]
+
+# Matriz de confusión SVM
+predicciones_GLM <- predict(model_GLM,clientes_glm)
+cm_GLM <- confusionMatrix(predicciones_GLM,clientes_pc_Test[["Class"]])
+
+# Medidas provabilisticas
+pred_prob_GLM <- predict(glm_ga$fit,clientes_pc_Test[,glm_ga$optVariables], type = "prob")
+auc_GLM <- auc(roc(pred_prob_GLM[,"positive"], clientes_pc_Test$"Class"))
+logLoss_GLM <- LogLoss(pred_GLM[,"positive"], boolean_Test)
+
+# Ordenamos nuestras medidas en un Data Frame
+medidas_GLM <- data.frame("Accuracy" = as.numeric(cm_GLM$overall[1]),
+                          "Kappa" = as.numeric(cm_GLM$overall[2]),
+                          "Post-Pred-Value" = as.numeric(cm_GLM$byClass[3]),
+                          "AUC" = auc_GLM,
+                          "LogLoss" = logLoss_GLM)
+
+medidas_GLM
+
+# ------------------------------Support Vector Machines------------------------------
+# Support Vector Machines num
+set.seed(33)
+model_SVM_param <- train(
+  Class ~ .,
+  clientes_pc_Train,
+  preProcess = c("scale"),
+  method = "svmRadialWeights",
+  metric = "ROC",
+  tuneGrid = expand.grid(sigma = rev(dexp(seq(0.1, 5, length = 5), rate = 1)),
+                         C = rev(dexp(seq(0.1, 5, length = 5), rate = 1)),
+                         Weight = c(1,2,3)),
+  trControl = trControl
+)
+
+plot(model_SVM_param)
+
+a <- predict(model_SVM_param,clientes_pc_Test, type = "prob")
+
+model_SVM_param$bestTune
+
+class(glm_ga$fit)
+class(model_SVM_param$bestTune)
+
+modelo_svm <- svm(Class~.,clientes_pc_Train, scale = TRUE, kernel = "radial",
+                  cost = model_SVM_param$bestTune$C,
+                  gamma = model_SVM_param$bestTune$sigma,
+                  type = "C-classification",
+                  probability= TRUE)
+
+svmGA <- list(
+  fit <- function (x, y, lev = NULL, last = FALSE, ...) 
+  {
+    dats <- cbind(x,y)
+    names(dats) <- c(names(x), "Class")
+    # svm(Class~., dats, scale = TRUE, kernel = "radial",
+    #     cost = model_SVM_param$bestTune$C,
+    #     gamma = model_SVM_param$bestTune$sigma,
+    #     type = "C-classification",
+    #     probability= TRUE)
+    train(
+      Class ~ .,
+      clientes_pc_Train,
+      preProcess = c("scale"),
+      method = "svmRadialWeights",
+      metric = "ROC",
+      tuneGrid = expand.grid(sigma = model_SVM_param$bestTune$sigma,
+                             C = model_SVM_param$bestTune$C,
+                             Weight = c(1)),
+      trControl = trainControl(
+        classProbs = TRUE,
+        summaryFunction=twoClassSummary,
+        method = "cv", 
+        number = 10
+      )
+    )
+  },
+  
+  pred <- function (object, x) 
+  {
+    tmp <- predict(object,x)
+    p <- attr(predict(object,x, probability = TRUE), type = "prob")
+    out <- cbind(data.frame(pred = tmp), 
+                 as.data.frame(p))
+  },
+  
+  fitness_intern <- function (object, x, y, maximize, p)
+  {
+    p <- attr(predict(object,x, probability = TRUE), type = "prob")[,2]
+    roc <- auc(roc(p,as.factor(y)))
+    names(roc) <- c("ROC")
+    return(roc)
+  },
+  
+  fitness_extern <- function (data, lev = NULL, model = NULL) 
+  {
+    roc <- auc(roc(data[, "positive"], 
+                   as.factor(data[, "obs"])))
+    names(roc) <- c("ROC")
+    return(roc)
+  },
+  
+  initial <- function (vars, popSize, ...) 
+  {
+    x <- matrix(NA, nrow = popSize, ncol = vars)
+    probs <- seq(0.9, 0.1, length = popSize)
+    for (i in 1:popSize) {
+      x[i, ] <- sample(0:1, replace = TRUE, size = vars, prob = c(probs[i], 
+                                                                  1 - probs[i]))
+    }
+    var_count <- apply(x, 1, sum)
+    if (any(var_count == 0)) {
+      for (i in which(var_count == 0)) {
+        x[i, ] <- sample(0:1, replace = TRUE, size = vars)
+      }
+    }
+    x
+  },
+  
+  selection <- function (population, fitness, r = NULL, q = NULL, ...) 
+  {
+    popSize = nrow(population)
+    if (is.null(r)) 
+      r <- 2/(popSize * (popSize - 1))
+    if (is.null(q)) 
+      q <- 2/popSize
+    rank <- (popSize + 1) - rank(fitness, ties.method = "random")
+    prob <- q - (rank - 1) * r
+    sel <- sample(1:popSize, size = popSize, prob = pmin(pmax(0, 
+                                                              prob), 1, na.rm = TRUE), replace = TRUE)
+    out <- list(population = population[sel, , drop = FALSE], 
+                fitness = fitness[sel])
+    out
+  },
+  
+  crossover <- function (population, fitness, parents, ...) 
+  {
+    fitness <- fitness[parents]
+    parents <- population[parents, , drop = FALSE]
+    n <- ncol(parents)
+    children <- matrix(as.double(NA), nrow = 2, ncol = n)
+    fitnessChildren <- rep(NA, 2)
+    crossOverPoint <- sample(0:n, size = 1)
+    if (crossOverPoint == 0) {
+      children[1:2, ] <- parents[2:1, ]
+      fitnessChildren[1:2] <- fitness[2:1]
+    }
+    else if (crossOverPoint == n) {
+      children <- parents
+      fitnessChildren <- fitness
+    }
+    else {
+      children[1, ] <- c(parents[1, 1:crossOverPoint], parents[2, 
+                                                               (crossOverPoint + 1):n])
+      children[2, ] <- c(parents[2, 1:crossOverPoint], parents[1, 
+                                                               (crossOverPoint + 1):n])
+    }
+    out <- list(children = children, fitness = fitnessChildren)
+    out
+  },
+  
+  mutation <- function (population, parent, ...) 
+  {
+    mutate <- parent <- as.vector(population[parent, ])
+    n <- length(parent)
+    j <- sample(1:n, size = 1)
+    mutate[j] <- abs(mutate[j] - 1)
+    mutate
+  },
+  
+  selectIter <- function (x, metric, maximize) 
+  {
+    bestIter <- if (maximize) 
+      which.max(x[, metric])
+    else which.min(x[, metric])
+    bestIter
+  }
+)
+
+names(svmGA) <- c("fit","pred","fitness_intern","fitness_extern",
+                  "initial","selection","crossover",     
+                  "mutation","selectIter" )
+
+svm_ctrl <- gafsControl(functions = svmGA,
+                           metric = c(internal = "ROC", external = "ROC"),
+                           method = "cv",
+                           number = 4,
+                           repeats = 2,
+                           verbose = TRUE)
+
+svm_ga <- gafs(x = clientes_pc_Train[,1:12], 
+                  y = clientes_pc_Train$"Class",
+                  iters = 15,
+                  gafsControl = svm_ctrl)
+
+
+# Matriz de confusión SVM
+predicciones_SVM <- predict(svm_ga$fit,clientes_pc_Test[,1:12])
+cm_SVM <- confusionMatrix(predicciones_SVM,clientes_pc_Test[["Class"]])
+
+# Medidas provabilisticas
+pred_SVM <- attr(predict(svm_ga$fit,clientes_pc_Test[,1:12], probability = TRUE),"probabilities")[,2]
+auc_SVM <- auc(roc(pred_SVM, clientes_pc_Test$"Class"))
+logLoss_SVM <- LogLoss(pred_SVM, boolean_Test)
+
+# Ordenamos nuestras medidas en un Data Frame
+medidas_SVM <- data.frame("Accuracy" = as.numeric(cm_SVM$overall[1]),
+                             "Kappa" = as.numeric(cm_SVM$overall[2]),
+                             "Post-Pred-Value" = as.numeric(cm_SVM$byClass[3]),
+                             "AUC" = auc_SVM,
+                             "LogLoss" = logLoss_SVM)
+
+medidas_SVM
